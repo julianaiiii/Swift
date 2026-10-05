@@ -1,0 +1,59 @@
+workflows:
+  ios-simulator:
+    name: iOS Simulator Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "CloudCalorieTracker.xcodeproj"
+        XCODE_SCHEME: "CloudCalorieTracker"
+    scripts:
+      - name: Build unsigned simulator app
+        script: |
+          xcodebuild build \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Package simulator app
+        script: |
+          APP_PATH=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/Debug-iphonesimulator/CloudCalorieTracker.app" -print -quit)
+          mkdir -p "$CM_BUILD_DIR/artifacts"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$CM_BUILD_DIR/artifacts/CloudCalorieTracker-Simulator.zip"
+    artifacts:
+      - artifacts/*.zip
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-app-store:
+    name: Signed iOS IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.CloudCalorieTracker
+      vars:
+        XCODE_PROJECT: "CloudCalorieTracker.xcodeproj"
+        XCODE_SCHEME: "CloudCalorieTracker"
+    scripts:
+      - name: Apply signing profiles
+        script: |
+          xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - $HOME/Library/Developer/Xcode/Archives/**/*.xcarchive
+      - /tmp/xcodebuild_logs/*.log
